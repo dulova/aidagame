@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#fff4f1">
+  <meta name="description" content="Муроблоки — маленькие игры для отдыха. Играй в своём ритме.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Муроблоки">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="./pwa/icon-192.png">
+  <link rel="apple-touch-icon" href="./pwa/apple-touch-icon.png">
+  <link rel="stylesheet" href="./src/styles.css">
+  <title>Муроблоки · маленькие игры для отдыха</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <button class="brand" id="brand" type="button" aria-label="В главное меню">
+        <span class="brand-mark"><img src="./icons/cat-logo.svg" alt=""></span>
+        <span class="brand-copy"><strong>Муроблоки</strong><small>маленькие игры для отдыха</small></span>
+      </button>
+      <button class="icon-button" id="settings-button" type="button" aria-label="Настройки" title="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8 14 4l2.2-.5 1.3 2 2.3.9.1 2.5L21.3 11l-1 2.1.4 2.2-2 1.3-.9 2.3-2.5.1L13 20.5l-2.1-1-2.2.4-1.3-2-2.3-.9L5 14.5 3.6 12l1-2.1-.4-2.2 2-1.3.9-2.3 2.5-.1L12 2.8Z"/><circle cx="12" cy="12" r="3.1"/></svg></button>
+    </header>
+    <main id="app" class="app-content" aria-live="polite"></main>
+    <footer class="app-footer">С любовью к спокойным головоломкам ✦ <a href="https://aidanastya.ru/" target="_blank" rel="noopener noreferrer">aidanastya</a></footer>
+  </div>
+  <div id="overlay" class="modal-root" aria-live="assertive"></div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
