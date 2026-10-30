@@ -8,7 +8,6 @@ import type { Placement } from '../game/logic';
 const props = defineProps<{ game: Game; stamp: string | null; disabled: boolean; attempt: (slot: number, col: number, row: number) => Placement | undefined }>();
 const emit = defineEmits<{ busy: [value: boolean] }>();
 const board = ref<HTMLElement>(); const panel = ref<HTMLElement>();
-const stack = ref<HTMLElement>(); let observer: ResizeObserver | undefined;
 const selected = ref<number | null>(null); const busy = ref(false);
 const clearing = shallowRef(new Map<number, Group>()); const placed = shallowRef(new Set<number>());
 const shown = computed(() => props.game.board.map((g,i) => clearing.value.get(i) ?? g));
@@ -22,30 +21,13 @@ function metrics(): Metrics {
   const cell = (rect.width - px - parseFloat(style.paddingRight) - gap * 9) / 10;
   return { left: rect.left + px, top: rect.top + py, cell, pitch: cell + gap };
 }
-function resize() {
-  if (drag || busy.value) return; if (!board.value || !panel.value || !stack.value) return;
-  const compact = innerHeight <= 650, style = getComputedStyle(board.value);
-  const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight), gap = parseFloat(style.columnGap);
-  const stackGap = parseFloat(getComputedStyle(stack.value).rowGap), available = stack.value.clientHeight;
-  function tray(width: number) {
-    const cell = Math.max(compact ? 9 : 11, Math.min((width - padding - 9 * gap) / 10 * .58, compact ? 14 : 23));
-    const piece = Math.max(8, Math.min(cell, (panel.value!.clientWidth / 3 - 22) / 5));
-    return { piece, height: Math.ceil(5 * piece + 8 + (compact ? 13 : 22)) };
-  }
-  let low = 80, high = Math.min(stack.value.clientWidth, 500);
-  for (let i = 0; i < 16; i++) { const mid = (low + high) / 2; if (mid + tray(mid).height + stackGap <= available) low = mid; else high = mid; }
-  const width = Math.floor(low), { piece, height } = tray(width);
-  board.value.style.width = `${width}px`;
-  panel.value.style.setProperty('--tray-cell', `${piece}px`);
-  panel.value.style.height = `${height}px`;
-}
 function position(d: Drag) {
   const { cols, rows } = shapeSize(d.shape);
   return { x: d.x - cols * d.metrics.pitch / 2, y: d.touch ? d.y - rows * d.metrics.pitch - 45 : d.y - rows * d.metrics.pitch / 2 };
 }
 function paint() { raf = 0; if (!drag || !ghost.value) return; const p = position(drag); ghost.value.style.transform = `translate3d(${p.x}px,${p.y}px,0)`; }
 function down(e: PointerEvent, slot: number) {
-  if (busy.value || props.disabled || e.button !== 0 || !props.game.slots[slot]) return;
+  if (!e.isPrimary || busy.value || props.disabled || e.button !== 0 || !props.game.slots[slot]) return;
   e.preventDefault(); (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   drag = { id: e.pointerId, slot, shape: props.game.slots[slot]!, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, touch: e.pointerType !== 'mouse', active: false, metrics: metrics() };
 }
@@ -95,15 +77,15 @@ function key(e: KeyboardEvent, index: number) {
   if (e.key in offsets) { e.preventDefault(); (board.value?.children[Math.max(0, Math.min(99, index + offsets[e.key]))] as HTMLElement)?.focus(); }
   if ((e.key === 'Enter' || e.key === ' ') && selected.value !== null) { e.preventDefault(); void place(selected.value, index % 10, Math.floor(index / 10)); }
 }
-function windowResize() { cancelDrag(); resize(); }
-function outside(e: PointerEvent) { if (!(e.target as HTMLElement).closest('.board,.pieces-panel')) selected.value = null; }
+function windowResize() { cancelDrag(); }
+function outside(e: PointerEvent) { if (e.pointerType === 'touch' && !e.isPrimary) cancelDrag(); if (!(e.target as HTMLElement).closest('.board,.pieces-panel')) selected.value = null; }
 function escape(e: KeyboardEvent) { if (e.key === 'Escape') { selected.value = null; cancelDrag(); } }
-onMounted(() => { resize(); observer = new ResizeObserver(resize); if (stack.value) observer.observe(stack.value); addEventListener('resize', windowResize); document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape); });
-onBeforeUnmount(() => { generation++; observer?.disconnect(); cancelDrag(); emit('busy', false); removeEventListener('resize', windowResize); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); });
+onMounted(() => { addEventListener('resize', windowResize); document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape); });
+onBeforeUnmount(() => { generation++; cancelDrag(); emit('busy', false); removeEventListener('resize', windowResize); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); });
 watch(() => props.game.turns, () => { if (props.game.turns === 0) { clearing.value = new Map(); placed.value = new Set(); selected.value = null; } });
 </script>
 <template>
-  <div ref="stack" class="play-stack">
+  <div class="play-stack">
     <div class="board-wrap"><div ref="board" class="board" id="game-board" role="grid" aria-label="Игровое поле 10 на 10" @click="click">
       <div v-for="(group, i) in shown" :key="i" class="board-cell" :data-cell="i" role="gridcell" :tabindex="i === 0 ? 0 : -1" :aria-label="`${group ? 'Занятая' : 'Свободная'} клетка, ряд ${Math.floor(i / 10) + 1}, столбец ${i % 10 + 1}`" @keydown="key($event, i)">
         <span v-if="group" :class="['board-block', `group-${group}`, { clearing: clearing.has(i), placing: placed.has(i) && !clearing.has(i) }]" :style="{ '--clear-delay': `${Math.max(0, [...clearing.keys()].indexOf(i)) * 80 / Math.max(1, clearing.size - 1)}ms` }"><span v-if="stamp" class="cell-stamp" :style="{ '--stamp-url': `url('${stamp}')` }"/></span>
