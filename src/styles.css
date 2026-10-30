@@ -151,3 +151,5 @@ img { -webkit-user-drag: none; }
  .game-screen { grid-template-rows: 42px auto 43px; }
  .play-stack { height: auto; }
 }
+
+.import-warning{margin-top:16px;padding:12px;background:var(--soft);border-radius:12px;color:var(--text);font-size:14px;line-height:1.45}

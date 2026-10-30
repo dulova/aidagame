@@ -1,5 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import { validateSave } from '../game/logic';
+import { gameModules } from '../game/registry';
+import { GAME_IDS, type GameId, type GameEntries } from '../types';
 import { themes, patterns } from '../design/themes.js';
 import type { Backup, Game, Settings, Snapshot } from '../types';
 
@@ -21,36 +23,53 @@ export function parseSettings(value: unknown): Settings {
   if (typeof theme !== 'string' || !Object.hasOwn(themes, theme) || !['light', 'dark'].includes(String(mode)) || !patterns.some(p => p.id === pattern)) throw Error('Неизвестная тема, режим или рисунок');
   return { theme, mode: mode as Settings['mode'], pattern: pattern as string };
 }
-function valid(snapshot: Snapshot): void {
+export function emptySnapshot(): Snapshot {
+  return { games: { 'block-puzzle': { save: null, best: 0 }, '2048': { save: null, best: 0 } }, settings: copy(defaults), revision: 0 };
+}
+function validEntry(id: GameId, entry: GameEntries[GameId]): void {
+  if (!entry || !Number.isSafeInteger(entry.best) || entry.best < 0 || entry.save !== null && (!gameModules[id].validateSave(entry.save) || entry.best < entry.save.score)) throw Error('Повреждённая партия или рекорд ' + gameModules[id].name);
+  if (id === 'block-puzzle' && entry.save && (entry.save as Game).best !== entry.best) throw Error('Рекорд не соответствует партии 1010!');
+}
+function valid(snapshot: Snapshot, allowDamaged = false): void {
   parseSettings(snapshot.settings);
-  if (!Number.isSafeInteger(snapshot.best) || snapshot.best < 0 || snapshot.game !== null && (!validateSave(snapshot.game) || snapshot.best < snapshot.game.score || snapshot.game.best !== snapshot.best)) throw Error('Повреждённые игровые данные или рекорд');
+  if (!snapshot.games || Object.keys(snapshot.games).length !== GAME_IDS.length || !GAME_IDS.every(id => Object.hasOwn(snapshot.games, id))) throw Error('Некорректный набор игр');
+  if (!allowDamaged && Object.keys(snapshot.damaged ?? {}).length) throw Error('Есть повреждённые данные. Скачайте исходные данные перед восстановлением.');
+  for (const id of GAME_IDS) if (!snapshot.damaged?.[id]) validEntry(id, snapshot.games[id]);
+}
+function canonical(snapshot: Snapshot): Snapshot {
+  return copy({ games: snapshot.games, settings: snapshot.settings, revision: snapshot.revision, ...(Object.keys(snapshot.damaged ?? {}).length ? { damaged: snapshot.damaged } : {}) });
 }
 function legacy(game: unknown, settings: unknown): Snapshot {
   if (game !== undefined && game !== null && !validateSave(game)) throw Error('Прежнее сохранение повреждено. Исходные данные не изменены.');
   const g = game as Game | null | undefined;
-  return { game: g ?? null, settings: settings == null ? copy(defaults) : parseSettings(settings), best: g?.best ?? 0, revision: 0 };
+  return { ...emptySnapshot(), games: { 'block-puzzle': { save: g ?? null, best: g?.best ?? 0 }, '2048': { save: null, best: 0 } }, settings: settings == null ? copy(defaults) : parseSettings(settings) };
 }
-export function parseBackup(json: string): Snapshot & { date: string } {
+export function parseBackup(json: string): Snapshot & { date: string; present: GameId[] } {
   if (json.length > 1024 * 1024) throw Error('Файл слишком большой (максимум 1 МиБ)');
   const d = JSON.parse(json);
   let snapshot: Snapshot;
   let date: string;
+  let present: GameId[];
   if (d?.format === 'muroblocks-backup' && d.version === 1) {
-    snapshot = legacy(d.game, d.settings); date = d.date;
+    snapshot = legacy(d.game, d.settings); date = d.date; present = ['block-puzzle'];
   } else if (d?.appId === 'muroblocks' && d.exportVersion === 2) {
-    if (!d.games || Object.keys(d.games).length !== 1 || !Object.hasOwn(d.games, 'block-puzzle')) throw Error('Файл содержит неподдерживаемые игры');
-    const g = d.games['block-puzzle'];
-    if (g?.saveVersion !== 1 || !g.records || !Object.hasOwn(g, 'save')) throw Error('Неподдерживаемая версия сохранения');
-    snapshot = { game: g.save, settings: parseSettings(d.settings), best: g.records.best, revision: 0 }; date = d.exportedAt;
+    if (!d.games || typeof d.games !== 'object' || !Object.keys(d.games).length || Object.keys(d.games).some(id => !GAME_IDS.includes(id as GameId))) throw Error('Файл содержит неподдерживаемые игры');
+    snapshot = emptySnapshot(); snapshot.settings = parseSettings(d.settings); present = Object.keys(d.games) as GameId[];
+    for (const id of present) {
+      const g = d.games[id];
+      if (g?.saveVersion !== 1 || !g.records || !Object.hasOwn(g, 'save')) throw Error('Неподдерживаемая версия сохранения');
+      Object.assign(snapshot.games, { [id]: { save: g.save, best: g.records.best } });
+    }
+    date = d.exportedAt;
   } else throw Error('Неизвестное приложение или версия файла');
   valid(snapshot);
   if (typeof date !== 'string' || !Number.isFinite(Date.parse(date))) throw Error('В файле отсутствует корректная дата');
-  return { ...copy(snapshot), date };
+  return { ...canonical(snapshot), date, present };
 }
 export function exportSnapshot(snapshot: Snapshot): string {
   valid(snapshot);
-  const data: Backup = { appId: 'muroblocks', exportVersion: 2, exportedAt: new Date().toISOString(), settings: snapshot.settings,
-    games: { 'block-puzzle': { saveVersion: 1, save: snapshot.game, records: { best: snapshot.best } } } };
+  const games = Object.fromEntries(GAME_IDS.map(id => [id, { saveVersion: 1, save: snapshot.games[id].save, records: { best: snapshot.games[id].best } }])) as Backup['games'];
+  const data: Backup = { appId: 'muroblocks', exportVersion: 2, exportedAt: new Date().toISOString(), settings: snapshot.settings, games };
   return JSON.stringify(data, null, 2);
 }
 
@@ -94,22 +113,37 @@ export function createRepository(name = DB_NAME, options: { notify?: (message: s
         await tx.done;
         return copy(chosen);
       }
-      const best = (await tx.objectStore('records').get('block-puzzle')) ?? 0;
-      const game = oldGame ? { ...oldGame, best } : null;
-      const snapshot = { game, settings: oldSettings ? parseSettings(oldSettings) : copy(defaults), best, revision };
-      valid(snapshot); await tx.done; return copy(snapshot);
+      if (!Number.isSafeInteger(revision) || revision < 0) throw Error('Повреждена ревизия хранилища. Исходные данные не изменены.');
+      const snapshot = emptySnapshot(); snapshot.revision = revision; snapshot.settings = oldSettings ? parseSettings(oldSettings) : copy(defaults);
+      for (const id of GAME_IDS) {
+        const raw = id === 'block-puzzle' ? oldGame : await tx.objectStore('items').get('game:' + id);
+        const record = await tx.objectStore('records').get(id);
+        const best = record === undefined ? 0 : record;
+        const save = raw == null ? null : id === 'block-puzzle' ? { ...raw, best } : raw;
+        const entry = { save, best };
+        try { validEntry(id, entry); Object.assign(snapshot.games, { [id]: entry }); }
+        catch {
+          snapshot.damaged ??= {}; snapshot.damaged[id] = 'Не удалось прочитать партию или рекорд ' + gameModules[id].name + '. Исходные данные сохранены.';
+          Object.assign(snapshot.games, { [id]: { save: null, best: Number.isSafeInteger(best) && best >= 0 ? best : 0 } });
+        }
+      }
+      valid(snapshot, true); await tx.done; return canonical(snapshot);
     } catch (error) { try { tx.abort(); } catch {} await tx.done.catch(() => {}); throw error; }
   }
   async function put(tx: any, value: Snapshot, revision: number) {
-    const game = value.game ? { ...value.game } as Partial<Game> : null;
-    if (game) delete game.best; // The durable record is independent of the current game.
-    await tx.objectStore('items').put(game, GAME_KEY);
+    for (const id of GAME_IDS) {
+      if (value.damaged?.[id]) continue; // Preserve damaged originals while the other game remains usable.
+      const entry = value.games[id];
+      const game = entry.save ? { ...entry.save } : null;
+      if (id === 'block-puzzle' && game) delete (game as Partial<Game>).best;
+      await tx.objectStore('items').put(game, 'game:' + id);
+      await tx.objectStore('records').put(entry.best, id);
+    }
     await tx.objectStore('items').put(value.settings, SETTINGS_KEY);
-    await tx.objectStore('records').put(value.best, 'block-puzzle');
     await tx.objectStore('metadata').put(revision, 'revision');
   }
   async function commit(snapshot: Snapshot, expected: number | undefined): Promise<Snapshot> {
-    const value = copy(snapshot); valid(value);
+    const value = canonical(snapshot); valid(value, true);
     const db = await open(); const tx = db.transaction(['items', 'records', 'metadata'], 'readwrite');
     try {
       const actual = await tx.objectStore('metadata').get('revision');
@@ -124,12 +158,12 @@ export function createRepository(name = DB_NAME, options: { notify?: (message: s
   async function close() { if (connection) (await connection).close(); connection = undefined; }
   async function rawRecovery(): Promise<string> {
     const db = await open(); const tx = db.transaction(['items', 'records', 'metadata']);
-    const data = { appId: 'muroblocks-raw-recovery', exportedAt: new Date().toISOString(), items: await tx.objectStore('items').getAll(), itemKeys: await tx.objectStore('items').getAllKeys(), records: await tx.objectStore('records').getAll(), revision: await tx.objectStore('metadata').get('revision') };
+    const data = { appId: 'muroblocks-raw-recovery', exportedAt: new Date().toISOString(), items: await tx.objectStore('items').getAll(), itemKeys: await tx.objectStore('items').getAllKeys(), records: await tx.objectStore('records').getAll(), recordKeys: await tx.objectStore('records').getAllKeys(), revision: await tx.objectStore('metadata').get('revision') };
     await tx.done; return JSON.stringify(data, null, 2);
   }
   async function reset(): Promise<Snapshot> {
     const db = await open(); const revision = await db.get('metadata', 'revision');
-    return commit({ game: null, best: 0, settings: copy(defaults), revision: 0 }, revision);
+    return commit(emptySnapshot(), revision);
   }
   return { load, commit, close, rawRecovery, reset };
 }
