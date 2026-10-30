@@ -23,5 +23,5 @@ test('updates from the real v1 Service Worker, preserving its progress, then reo
     await Promise.all([page.waitForEvent('load'),page.getByRole('button',{name:'Обновить',exact:true}).click()]);
     await page.locator('#start-game').click();await expect(page.locator('.score-current')).toHaveText(score!);
     await context.setOffline(true);await page.reload();await page.locator('#start-game').click();await expect(page.locator('.score-current')).toHaveText(score!);
-  } finally { await context.setOffline(false);server.close(); }
+  } finally { await context.setOffline(false);server.closeAllConnections();server.close(); }
 });
