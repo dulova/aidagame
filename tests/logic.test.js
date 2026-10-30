@@ -1,9 +1,10 @@
-import test from 'node:test';import assert from 'node:assert/strict';
-import { CATALOG,SHAPE_BY_ID } from '../src/game/shapes.js';
-import { emptyBoard,createInitialState,canPlaceShape,findCompletedLines,clearCompletedLines,calculateScore,placeShape,hasAvailableMoves,validateSave,generateShapeSet } from '../src/game/logic.js';
+import { test } from 'vitest';import assert from 'node:assert/strict';
+import { CATALOG,SHAPE_BY_ID } from '../src/game/shapes';
+import { emptyBoard,createInitialState,canPlaceShape,findCompletedLines,clearCompletedLines,calculateScore,placeShape,hasAvailableMoves,validateSave,generateShapeSet } from '../src/game/logic';
 const pick=id=>({id,group:SHAPE_BY_ID[id].group,cells:SHAPE_BY_ID[id].orientations[0]});
 test('all 27 unique orientations with correct shape sizes',()=>{assert.equal(CATALOG.reduce((n,s)=>n+s.orientations.length,0),27);assert.deepEqual(CATALOG.map(s=>s.orientations.length),[1,1,1,2,2,2,2,4,8,4]);assert.equal(SHAPE_BY_ID.square_3.cells.length,9);for(const s of CATALOG){assert.equal(s.orientations.length,new Set(s.orientations.map(o=>JSON.stringify(o))).size);for(const o of s.orientations){assert.equal(o.length,s.cells.length);assert.equal(new Set(o.map(c=>c.join(','))).size,o.length);}}});
 test('weights add up to 100',()=>assert.equal(CATALOG.reduce((n,s)=>n+s.weight,0),100));
+test('a legal set may contain only large figures; no small figure is forced',()=>{const slots=generateShapeSet(emptyBoard(),()=>.31);assert.ok(slots.every(s=>s.cells.length===9));assert.ok(hasAvailableMoves(emptyBoard(),slots));});
 test('new game is valid and fair',()=>{const s=createInitialState(()=>0.5);assert.equal(s.board.length,100);assert.equal(s.slots.length,3);assert.ok(hasAvailableMoves(s.board,s.slots));assert.ok(validateSave(s));});
 test('invalid placements are rejected',()=>{const game=createInitialState(()=>0);const shape=game.slots[0];assert.equal(canPlaceShape(game.board,shape,-1,0),false);assert.equal(canPlaceShape(game.board,shape,10,0),false);const result=placeShape(game,0,10,0);assert.equal(result.accepted,false);assert.equal(result.state.score,0);assert.equal(result.state.slots.length,3);});
 test('placements consume one slot, award one point per cell, preserve group',()=>{const game=createInitialState(()=>0);const shape=game.slots[0];const result=placeShape(game,0,0,0,()=>0);assert.ok(result.accepted);assert.equal(result.state.score,shape.cells.length);assert.equal(result.state.slots[0],null);for(const [x,y] of shape.cells)assert.equal(result.state.board[y*10+x],shape.group);assert.equal(game.score,0);});

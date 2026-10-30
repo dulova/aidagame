@@ -8,7 +8,7 @@ export const themes = {
   aidanastya: {name:'Ай Да Настя',bg:'#FAF7F5',surface:'#FFFFFF',soft:'#E8DDD5',text:'#202020',secondary:'#8d735f',accent:'#CA8141',accentText:'#ffffff',selection:'#e7bd9c',selectionText:'#773d20',cell:'#e9ded5',focus:'#CE4320',border:'#e3d4c9',blockSingle:'#e2b267',blockDouble:'#8fa986',blockTriple:'#86b6bd',blockLine:'#CE4320',blockL:'#a08870',stamp:'#442f23'}
 };
 export const themeOrder = ['winter','spring','summer','autumn','pastel','aidanastya'];
-export const patterns = [{id:'none',name:'Без рисунка',icon:null},{id:'paw',name:'Лапки',icon:'foot'},{id:'pumpkin',name:'Тыковки',icon:'pumpkin'},{id:'heart',name:'Сердечки',icon:'heart'},{id:'snow',name:'Снежинки',icon:'snow'},{id:'leaf',name:'Листья',icon:'leave'}];
+export const patterns = [{id:'none',name:'Однотонный',icon:null},{id:'paw',name:'Лапка',icon:'foot'},{id:'snow',name:'Снежинка',icon:'snow'},{id:'heart',name:'Сердечки',icon:'heart'},{id:'leaf',name:'Лист',icon:'leave'},{id:'pumpkin',name:'Тыковка',icon:'pumpkin'}];
 export const blockTokenByGroup = {square_single:'blockSingle',square_double:'blockDouble',square_triple:'blockTriple',line:'blockLine',l_shape:'blockL'};
 // A separate, considered dark palette for every visual theme. The 5 groups keep their IDs.
 export const darkPalettes = {
