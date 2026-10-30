@@ -113,3 +113,8 @@ Vue добавляет runtime по сравнению с нынешним пр�
 - [Vue: размер production bundle, предварительная компиляция шаблонов и измерения](https://vuejs.org/guide/best-practices/performance.html).
 - [Vite: TypeScript требует отдельной проверки типов](https://vite.dev/guide/features.html#typescript).
 - [Vite PWA: предложение применить обновление](https://vite-pwa-org.netlify.app/guide/prompt-for-update.html).
+
+
+## Следующий этап: 2048
+
+Объём этого файла относится к выпущенной 1.2.0. Документы будущей 2048: [игровое ТЗ](specs/aidagame_2048_gameplay_spec.md) и [техническая интеграция](specs/aidagame_2048_integration_spec.md). Продолжение после 2048, оформление в 12 вариантах, управление и полный импорт согласованы. Базовые правила подтверждены, реализация разрешена. Реализация, активация карточки и публикация здесь не выполняются.
